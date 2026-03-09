@@ -34915,6 +34915,14 @@ function fmiDescription(fmi){
     return ({"00":"Slow flash","01":"Fast flash","10":"Special / reserved","11":"Do not flash / N/A"})[bits] || "-";
   }
 
+  function isLampVisuallyActive(kind, statusBits, flashBits, text){
+    if (text === "Don’t care" || text === "SAE reserved") return false;
+    if (text.startsWith("Off")) return false;
+    if (kind === "mil" && (text === "Short MIL active" || text === "On, class C active")) return true;
+    if (text.startsWith("On")) return true;
+    return false;
+  }
+
   function decodeDm1Lamps(byte1, byte2){
     const milStatus = ((byte1 >> 6) & 0x03).toString(2).padStart(2, "0");
     const rslStatus = ((byte1 >> 4) & 0x03).toString(2).padStart(2, "0");
@@ -34926,34 +34934,39 @@ function fmiDescription(fmi){
     const awlFlash = ((byte2 >> 2) & 0x03).toString(2).padStart(2, "0");
     const protectFlash = (byte2 & 0x03).toString(2).padStart(2, "0");
 
+    const milText = lampCommandText("mil", milStatus, milFlash);
+    const rslText = lampCommandText("rsl", rslStatus, rslFlash);
+    const awlText = lampCommandText("awl", awlStatus, awlFlash);
+    const protectText = lampCommandText("protect", protectStatus, protectFlash);
+
     return {
       mil: {
-        text: lampCommandText("mil", milStatus, milFlash),
+        text: milText,
         bits: `Status: ${milStatus} (${lampStateBitsLabel(milStatus)}) | Flash: ${milFlash} (${lampFlashBitsLabel(milFlash)})`,
         statusBits: milStatus,
         flashBits: milFlash,
-        active: milStatus !== "00"
+        active: isLampVisuallyActive("mil", milStatus, milFlash, milText)
       },
       rsl: {
-        text: lampCommandText("rsl", rslStatus, rslFlash),
+        text: rslText,
         bits: `Status: ${rslStatus} (${lampStateBitsLabel(rslStatus)}) | Flash: ${rslFlash} (${lampFlashBitsLabel(rslFlash)})`,
         statusBits: rslStatus,
         flashBits: rslFlash,
-        active: rslStatus !== "00"
+        active: isLampVisuallyActive("rsl", rslStatus, rslFlash, rslText)
       },
       awl: {
-        text: lampCommandText("awl", awlStatus, awlFlash),
+        text: awlText,
         bits: `Status: ${awlStatus} (${lampStateBitsLabel(awlStatus)}) | Flash: ${awlFlash} (${lampFlashBitsLabel(awlFlash)})`,
         statusBits: awlStatus,
         flashBits: awlFlash,
-        active: awlStatus !== "00"
+        active: isLampVisuallyActive("awl", awlStatus, awlFlash, awlText)
       },
       protect: {
-        text: lampCommandText("protect", protectStatus, protectFlash),
+        text: protectText,
         bits: `Status: ${protectStatus} (${lampStateBitsLabel(protectStatus)}) | Flash: ${protectFlash} (${lampFlashBitsLabel(protectFlash)})`,
         statusBits: protectStatus,
         flashBits: protectFlash,
-        active: protectStatus !== "00"
+        active: isLampVisuallyActive("protect", protectStatus, protectFlash, protectText)
       }
     };
   }
