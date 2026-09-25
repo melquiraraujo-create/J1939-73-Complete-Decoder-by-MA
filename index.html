@@ -127,9 +127,10 @@
 
     .grid{
       display:grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       margin-top: 14px;
+      min-width: 0;
     }
 
     .result{
@@ -137,6 +138,9 @@
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 16px;
       padding: 16px;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
     }
 
     .rowKPI{
@@ -284,6 +288,9 @@
     .packetResult{
       display:none;
       margin-top: 14px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }
     .packetMeta{
       display:grid;
@@ -296,14 +303,28 @@
     }
     .packetTableWrap{
       margin-top: 14px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
       border: 1px solid rgba(255,255,255,.10);
       border-radius: 14px;
       background: rgba(0,0,0,.12);
+      scrollbar-color: rgba(58,166,255,.7) rgba(255,255,255,.06);
+      scrollbar-width: thin;
+    }
+    .packetTableWrap::-webkit-scrollbar{ height: 10px; }
+    .packetTableWrap::-webkit-scrollbar-track{ background: rgba(255,255,255,.06); }
+    .packetTableWrap::-webkit-scrollbar-thumb{
+      background: rgba(58,166,255,.65);
+      border-radius: 999px;
     }
     .packetTable{
-      width:100%;
-      min-width: 980px;
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
       font-size: 13px;
     }
@@ -320,6 +341,12 @@
       letter-spacing: .55px;
       text-transform: uppercase;
       background: rgba(255,255,255,.05);
+    }
+    .packetTable td.descCell{
+      min-width: 260px;
+      max-width: 360px;
+      white-space: normal;
+      line-height: 1.35;
     }
     .packetTable tbody tr:last-child td{ border-bottom: 0; }
     .packetTable tbody tr:hover{ background: rgba(255,255,255,.035); }
@@ -447,8 +474,11 @@
                       <th>Longitude</th>
                       <th>Latitude</th>
                       <th>Status</th>
+                      <th>DTC HEX (4 bytes)</th>
                       <th>SPN</th>
+                      <th>Descrição SAE (SPN)</th>
                       <th>FMI</th>
+                      <th>Descrição FMI</th>
                       <th>CM</th>
                       <th>OC</th>
                     </tr>
@@ -35152,6 +35182,8 @@ function fmiDescription(fmi){
         bytes[offset + 17],
         bytes[offset + 18]
       );
+      const dtcHex = dtc.bytes.join(" ");
+      const spnDesc = spnDescription(dtc.spn) || "SPN não pertence a SAE J1939 / Proprietário";
 
       records.push({
         number: index + 1,
@@ -35164,6 +35196,8 @@ function fmiDescription(fmi){
         status,
         statusLabel: dtcStatusLabel(status),
         reserved,
+        dtcHex,
+        spnDesc,
         ...dtc
       });
       offset += 19;
@@ -35275,10 +35309,11 @@ function fmiDescription(fmi){
     document.getElementById("packetDtcBody").replaceChildren();
   }
 
-  function appendPacketCell(row, value, mono){
+  function appendPacketCell(row, value, mono, className){
     const cell = document.createElement("td");
     cell.textContent = String(value);
     if(mono) cell.classList.add("mono");
+    if(className) cell.classList.add(className);
     row.appendChild(cell);
   }
 
@@ -35301,8 +35336,11 @@ function fmiDescription(fmi){
       appendPacketCell(row, record.longitude.toFixed(7), true);
       appendPacketCell(row, record.latitude.toFixed(7), true);
       appendPacketCell(row, record.statusLabel, false);
+      appendPacketCell(row, record.dtcHex, true);
       appendPacketCell(row, record.spn, true);
+      appendPacketCell(row, record.spnDesc, false, "descCell");
       appendPacketCell(row, record.fmi, true);
+      appendPacketCell(row, record.fmiDesc, false, "descCell");
       appendPacketCell(row, record.cm, true);
       appendPacketCell(row, record.oc, true);
       body.appendChild(row);
