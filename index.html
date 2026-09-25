@@ -280,15 +280,60 @@
       50% { opacity: 1; }
     }
 
+
+    .packetResult{
+      display:none;
+      margin-top: 14px;
+    }
+    .packetMeta{
+      display:grid;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .packetMeta .kValue{
+      font-size: 18px;
+      overflow-wrap: anywhere;
+    }
+    .packetTableWrap{
+      margin-top: 14px;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 14px;
+      background: rgba(0,0,0,.12);
+    }
+    .packetTable{
+      width:100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .packetTable th,
+    .packetTable td{
+      padding: 11px 10px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,.09);
+      white-space: nowrap;
+    }
+    .packetTable th{
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .55px;
+      text-transform: uppercase;
+      background: rgba(255,255,255,.05);
+    }
+    .packetTable tbody tr:last-child td{ border-bottom: 0; }
+    .packetTable tbody tr:hover{ background: rgba(255,255,255,.035); }
     @media (max-width: 760px){
       h1{ font-size: 26px; }
       .rowKPI{ grid-template-columns: 1fr 1fr; }
       .truckPanel{ grid-template-columns: 1fr 1fr; }
       .pill{ white-space: normal; }
+      .packetMeta{ grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 420px){
       .truckPanel{ grid-template-columns: 1fr; }
       .rowKPI{ grid-template-columns: 1fr; }
+      .packetMeta{ grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -300,7 +345,7 @@
         <div class="" aria-hidden="true"></div>
         <div>
           <h1>Conversor DTC J1939</h1>
-          <div class="subtitle">Decodifica DTC de 4 bytes e também os 2 bytes de lâmpadas do DM1</div>
+          <div class="subtitle">Decodifica DTC de 4 bytes, frames DM1 e pacotes Ruptela Command 9</div>
         </div>
       </div>
     </div>
@@ -308,14 +353,15 @@
     <div class="card">
       <div class="content">
         <div class="hint">
-          Cole um <b>DTC de 4 bytes</b>, um <b>frame DM1 single frame de 6 bytes</b> ou um <b>frame DM1 single frame de 8 bytes</b>.<br>
+          Cole um <b>DTC de 4 bytes</b>, um <b>frame DM1 single frame de 6 ou 8 bytes</b> ou um <b>pacote completo Ruptela Command 9</b>.<br>
           DTC: <span class="mono">F5 13 0C 01</span> ou <span class="mono">F5130C01</span><br>
           DM1 6 bytes: <span class="mono">00 00 31 8F C8 FE</span> → completa <span class="mono">FF FF</span> automaticamente<br>
-          DM1 8 bytes: <span class="mono">00 00 31 8F C8 FE FF FF</span>
+          DM1 8 bytes: <span class="mono">00 00 31 8F C8 FE FF FF</span><br>
+          Ruptela Command 9: frame hexadecimal contínuo com tamanho, IMEI, ocorrências de DTC e CRC16
         </div>
 
         <div class="inputRow">
-          <input id="dtc" class="mono" placeholder="Digite aqui… Ex: F5130C01, 00 00 31 8F C8 FE ou 00 00 31 8F C8 FE FF FF" autocomplete="off" />
+          <input id="dtc" class="mono" placeholder="Digite um DTC, DM1 ou pacote Ruptela Command 9" autocomplete="off" />
         </div>
 
         <div class="btnRow">
@@ -331,7 +377,7 @@
 
         <div class="grid">
           <div class="result">
-            <div class="rowKPI">
+            <div class="rowKPI" id="singleDtcKpis">
               <div class="kpi">
                 <div class="kLabel">SPN</div>
                 <div class="kValue mono" id="spn">-</div>
@@ -366,11 +412,57 @@
               <div class="pill">Modo: <span class="mono" id="mode">-</span></div>
             </div>
 
-            <div class="line" style="margin-top:18px; padding-top:18px;">
+            <div class="packetResult" id="command9Result">
+              <div class="packetMeta">
+                <div class="kpi">
+                  <div class="kLabel">Packet length</div>
+                  <div class="kValue mono" id="packetLength">-</div>
+                </div>
+                <div class="kpi">
+                  <div class="kLabel">IMEI</div>
+                  <div class="kValue mono" id="packetImei">-</div>
+                </div>
+                <div class="kpi">
+                  <div class="kLabel">Command ID</div>
+                  <div class="kValue mono" id="packetCommand">-</div>
+                </div>
+                <div class="kpi">
+                  <div class="kLabel">Número de DTCs</div>
+                  <div class="kValue mono" id="packetCount">-</div>
+                </div>
+                <div class="kpi">
+                  <div class="kLabel">CRC16</div>
+                  <div class="kValue mono" id="packetCrc">-</div>
+                </div>
+              </div>
+
+              <div class="packetTableWrap">
+                <table class="packetTable">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Source</th>
+                      <th>Time (UNIX)</th>
+                      <th>Data/Hora (UTC)</th>
+                      <th>Longitude</th>
+                      <th>Latitude</th>
+                      <th>Status</th>
+                      <th>SPN</th>
+                      <th>FMI</th>
+                      <th>CM</th>
+                      <th>OC</th>
+                    </tr>
+                  </thead>
+                  <tbody id="packetDtcBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="line" id="dm1SectionTitle" style="margin-top:18px; padding-top:18px;">
               <div style="font-size:14px; color:rgba(255,255,255,.88); font-weight:600;">Lâmpadas DM1 (bytes 1 e 2)</div>
             </div>
 
-            <div class="truckPanel">
+            <div class="truckPanel" id="dm1TruckPanel">
               <div class="truckLamp">
                 <span class="lampLed red" id="truckMilLed"></span>
                 <span class="truckLampLabel">MIL</span>
@@ -389,7 +481,7 @@
               </div>
             </div>
 
-            <div class="rowKPI" style="margin-top:12px;">
+            <div class="rowKPI" id="dm1Kpis" style="margin-top:12px;">
               <div class="kpi">
                 <div class="kLabel">MIL · SPN 1213</div>
                 <div class="kValue" style="font-size:18px; line-height:1.2;" id="lampMil">-</div>
@@ -34989,22 +35081,134 @@ function fmiDescription(fmi){
     };
   }
 
+
+  function readUint16BE(bytes, offset){
+    return (bytes[offset] << 8) | bytes[offset + 1];
+  }
+
+  function readUint32BE(bytes, offset){
+    return (bytes[offset] * 0x1000000) +
+      (bytes[offset + 1] << 16) +
+      (bytes[offset + 2] << 8) +
+      bytes[offset + 3];
+  }
+
+  function readInt32BE(bytes, offset){
+    const value = readUint32BE(bytes, offset);
+    return value > 0x7FFFFFFF ? value - 0x100000000 : value;
+  }
+
+  function formatUnixUtc(timestamp){
+    const date = new Date(timestamp * 1000);
+    if(Number.isNaN(date.getTime())) return "Timestamp inválido";
+    return date.toISOString().slice(0, 19).replace("T", " ");
+  }
+
+  function dtcSourceLabel(source){
+    if(source === 0xFF) return "OBD";
+    if(source === 0x01) return "J1939";
+    if(source === 0x02) return "J1708";
+    return "Unknown (0x" + toHex(source) + ")";
+  }
+
+  function dtcStatusLabel(status){
+    if(status === 1) return "current DTC";
+    if(status === 2) return "history DTC";
+    return "Unknown (" + status + ")";
+  }
+
+  function decodeRuptelaCommand9(bytes, norm){
+    const packetLength = readUint16BE(bytes, 0);
+    const imeiHex = bytes.slice(2, 10).map(toHex).join("");
+    const imei = BigInt("0x" + imeiHex).toString(10);
+    const commandId = bytes[10];
+    const dtcCount = bytes[11];
+    const expectedPayloadLength = 10 + (dtcCount * 19);
+    const expectedFrameLength = packetLength + 4;
+
+    if(packetLength !== expectedPayloadLength){
+      throw new Error("Packet length inconsistente: informado " + packetLength + ", esperado " + expectedPayloadLength + " para " + dtcCount + " DTC(s).");
+    }
+    if(bytes.length !== expectedFrameLength){
+      throw new Error("Tamanho total inconsistente: recebido " + bytes.length + " bytes, esperado " + expectedFrameLength + " (2 bytes de tamanho + payload + CRC16).");
+    }
+
+    const records = [];
+    let offset = 12;
+    for(let index = 0; index < dtcCount; index++){
+      if(offset + 19 > bytes.length - 2){
+        throw new Error("Pacote truncado no registro DTC " + (index + 1) + ".");
+      }
+
+      const source = bytes[offset];
+      const timestamp = readUint32BE(bytes, offset + 1);
+      const longitude = readInt32BE(bytes, offset + 5) / 10000000;
+      const latitude = readInt32BE(bytes, offset + 9) / 10000000;
+      const status = bytes[offset + 13];
+      const reserved = bytes[offset + 14];
+      const dtc = decodeDtcBytes(
+        bytes[offset + 15],
+        bytes[offset + 16],
+        bytes[offset + 17],
+        bytes[offset + 18]
+      );
+
+      records.push({
+        number: index + 1,
+        source,
+        sourceLabel: dtcSourceLabel(source),
+        timestamp,
+        utc: formatUnixUtc(timestamp),
+        longitude,
+        latitude,
+        status,
+        statusLabel: dtcStatusLabel(status),
+        reserved,
+        ...dtc
+      });
+      offset += 19;
+    }
+
+    const crc = (bytes[offset] << 8) | bytes[offset + 1];
+    return {
+      packetType: "ruptela-command-9",
+      mode: "Ruptela Command 9 Packet",
+      norm,
+      bytes: bytes.map(toHex),
+      packetLength,
+      imei,
+      commandId,
+      dtcCount,
+      records,
+      crc,
+      crcHex: "0x" + crc.toString(16).toUpperCase().padStart(4, "0")
+    };
+  }
   function decodeInput(hexStr){
     let norm = cleanHex(hexStr);
     let paddedDm1 = false;
 
+    if(!norm || norm.length % 2 !== 0){
+      throw new Error("A entrada hexadecimal precisa conter bytes completos.");
+    }
+
+    let bytes = [];
+    for (let i = 0; i < norm.length; i += 2) {
+      bytes.push(parseInt(norm.slice(i, i + 2), 16));
+    }
+
+    if(bytes.length >= 21 && bytes[10] === 0x09){
+      return decodeRuptelaCommand9(bytes, norm);
+    }
+
     if(norm.length === 12){
       norm += "FFFF";
+      bytes.push(0xFF, 0xFF);
       paddedDm1 = true;
     }
 
     if(norm.length !== 8 && norm.length !== 16){
-      throw new Error("Entrada precisa ter 4 bytes (DTC), 6 bytes (DM1 + padding FF FF) ou 8 bytes (DM1). Ex: F5130C01, 0000318FC8FE ou 0000318FC8FEFFFF");
-    }
-
-    const bytes = [];
-    for (let i = 0; i < norm.length; i += 2) {
-      bytes.push(parseInt(norm.slice(i, i + 2), 16));
+      throw new Error("Entrada precisa ter 4 bytes (DTC), 6 bytes (DM1 + padding FF FF), 8 bytes (DM1) ou um pacote Ruptela Command 9 válido.");
     }
 
     if (bytes.length === 4) {
@@ -35052,7 +35256,61 @@ function fmiDescription(fmi){
     if(lamp.flashBits === "01") el.classList.add("flashFast");
   }
 
+
+  function setPacketMode(active){
+    const display = active ? "none" : "";
+    document.getElementById("singleDtcKpis").style.display = display;
+    document.getElementById("dm1SectionTitle").style.display = display;
+    document.getElementById("dm1TruckPanel").style.display = display;
+    document.getElementById("dm1Kpis").style.display = display;
+    document.getElementById("command9Result").style.display = active ? "block" : "none";
+  }
+
+  function clearPacketResult(){
+    setText("packetLength", "-");
+    setText("packetImei", "-");
+    setText("packetCommand", "-");
+    setText("packetCount", "-");
+    setText("packetCrc", "-");
+    document.getElementById("packetDtcBody").replaceChildren();
+  }
+
+  function appendPacketCell(row, value, mono){
+    const cell = document.createElement("td");
+    cell.textContent = String(value);
+    if(mono) cell.classList.add("mono");
+    row.appendChild(cell);
+  }
+
+  function renderCommand9(d){
+    setPacketMode(true);
+    setText("packetLength", d.packetLength);
+    setText("packetImei", d.imei);
+    setText("packetCommand", d.commandId);
+    setText("packetCount", d.dtcCount);
+    setText("packetCrc", d.crcHex);
+
+    const body = document.getElementById("packetDtcBody");
+    body.replaceChildren();
+    d.records.forEach((record) => {
+      const row = document.createElement("tr");
+      appendPacketCell(row, record.number, true);
+      appendPacketCell(row, record.sourceLabel, false);
+      appendPacketCell(row, record.timestamp, true);
+      appendPacketCell(row, record.utc, true);
+      appendPacketCell(row, record.longitude.toFixed(7), true);
+      appendPacketCell(row, record.latitude.toFixed(7), true);
+      appendPacketCell(row, record.statusLabel, false);
+      appendPacketCell(row, record.spn, true);
+      appendPacketCell(row, record.fmi, true);
+      appendPacketCell(row, record.cm, true);
+      appendPacketCell(row, record.oc, true);
+      body.appendChild(row);
+    });
+  }
   function renderEmpty(){
+    setPacketMode(false);
+    clearPacketResult();
     setText("spn","-"); setText("spnDesc","-"); setText("fmi","-"); setText("oc","-"); setText("cm","-"); setText("cmDesc","-");
     setText("fmiDesc","-");
     setText("norm","-"); setText("bytes","-"); setText("mode","-");
@@ -35068,6 +35326,18 @@ function fmiDescription(fmi){
   }
 
   function renderOk(d){
+    setText("norm", d.norm);
+    setText("bytes", d.bytes.join(" "));
+    setText("mode", d.mode || "-");
+
+    if(d.packetType === "ruptela-command-9"){
+      renderCommand9(d);
+      setText("error", "");
+      return;
+    }
+
+    setPacketMode(false);
+    clearPacketResult();
     setText("spn", String(d.spn));
     const spnDesc = d.spn === "-" ? "-" : spnDescription(d.spn);
     setText("spnDesc", d.spn === "-" ? "-" : (spnDesc ? spnDesc : "SPN não pertence a SAE J1939 / Proprietário"));
@@ -35076,9 +35346,6 @@ function fmiDescription(fmi){
     setText("cm",  String(d.cm));
     setText("cmDesc", d.cm === "-" ? "-" : (d.cm === 0 ? "Padrão SAE" : "Proprietário"));
     setText("fmiDesc", d.fmiDesc);
-    setText("norm", d.norm);
-    setText("bytes", d.bytes.join(" "));
-    setText("mode", d.mode || "-");
 
     if (d.lamps) {
       setText("lampMil", d.lamps.mil.text);
